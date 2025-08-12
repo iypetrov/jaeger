@@ -100,13 +100,15 @@ func GetAdaptiveSamplingComponents(host component.Host) (*AdaptiveSamplingCompon
 }
 
 func (ext *rsExtension) Start(ctx context.Context, host component.Host) error {
+	var errs []error
+
 	if ext.cfg.File != nil {
 		ext.telemetry.Logger.Info(
 			"Starting file-based sampling strategy provider",
 			zap.String("path", ext.cfg.File.Path),
 		)
 		if err := ext.startFileBasedStrategyProvider(ctx); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 
@@ -116,23 +118,23 @@ func (ext *rsExtension) Start(ctx context.Context, host component.Host) error {
 			zap.String("sampling_store", ext.cfg.Adaptive.SamplingStore),
 		)
 		if err := ext.startAdaptiveStrategyProvider(host); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
 
 	if ext.cfg.HTTP != nil {
 		if err := ext.startHTTPServer(ctx, host); err != nil {
-			return fmt.Errorf("failed to start sampling http server: %w", err)
+			errs = append(errs, err)
 		}
 	}
 
 	if ext.cfg.GRPC != nil {
 		if err := ext.startGRPCServer(ctx, host); err != nil {
-			return fmt.Errorf("failed to start sampling gRPC server: %w", err)
+			errs = append(errs, err)
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func (ext *rsExtension) Shutdown(ctx context.Context) error {
@@ -140,7 +142,7 @@ func (ext *rsExtension) Shutdown(ctx context.Context) error {
 
 	if ext.httpServer != nil {
 		if err := ext.httpServer.Shutdown(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("failed to stop the sampling HTTP server: %w", err))
+			errs = append(errs, err)
 		}
 	}
 
@@ -150,15 +152,16 @@ func (ext *rsExtension) Shutdown(ctx context.Context) error {
 
 	if ext.distLock != nil {
 		if err := ext.distLock.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to stop the distributed lock: %w", err))
+			errs = append(errs, err)
 		}
 	}
 
 	if ext.strategyProvider != nil {
 		if err := ext.strategyProvider.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to stop strategy provider: %w", err))
+			errs = append(errs, err)
 		}
 	}
+
 	return errors.Join(errs...)
 }
 
